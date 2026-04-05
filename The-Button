@@ -1,0 +1,294 @@
+-- Auto Infinite Ammo Scanner
+-- K = Bật/Tắt
+-- Tự động quét TẤT CẢ tools có Ammo/MaxAmmo và set = infinity
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local backpack = player:WaitForChild("Backpack")
+local character = player.Character or player.CharacterAdded:Wait()
+
+local enabled = false
+local updateConn = nil
+local scannedTools = {}
+
+-- =============================================
+-- GUI
+-- =============================================
+local sg = Instance.new("ScreenGui")
+sg.Name = "AutoInfAmmoGui"
+sg.ResetOnSpawn = false
+sg.Parent = player:WaitForChild("PlayerGui")
+
+local lbl = Instance.new("TextLabel")
+lbl.Size = UDim2.new(0, 320, 0, 120)
+lbl.Position = UDim2.new(0, 10, 0.5, 130)
+lbl.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+lbl.BackgroundTransparency = 0.1
+lbl.BorderSizePixel = 0
+lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+lbl.TextSize = 17
+lbl.Font = Enum.Font.GothamBold
+lbl.TextWrapped = true
+lbl.TextXAlignment = Enum.TextXAlignment.Left
+lbl.Text = "[K] Auto Inf Ammo: OFF\n\nScanned: 0 tools\nAmmo Locked: 0 weapons\n\nAuto-detect Ammo attributes"
+lbl.Parent = sg
+
+local padding = Instance.new("UIPadding")
+padding.PaddingLeft = UDim.new(0, 10)
+padding.PaddingTop = UDim.new(0, 8)
+padding.Parent = lbl
+
+Instance.new("UICorner", lbl).CornerRadius = UDim.new(0, 10)
+local stroke = Instance.new("UIStroke", lbl)
+stroke.Color = Color3.fromRGB(80, 80, 80)
+stroke.Thickness = 2
+
+-- =============================================
+-- SCAN VÀ SET INFINITE AMMO
+-- =============================================
+local function scanAndSetInfiniteAmmo()
+    local toolsFound = 0
+    local ammoLocked = 0
+    
+    -- Scan Backpack
+    for _, tool in pairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            toolsFound = toolsFound + 1
+            
+            -- Method 1: ATTRIBUTES (như L106 trong ảnh)
+            local attributes = tool:GetAttributes()
+            for attrName, attrValue in pairs(attributes) do
+                local name = attrName:lower()
+                
+                if name:find("ammo") or name:find("mag") or name:find("clip") then
+                    -- Set ammo = MaxAmmo nếu có
+                    local maxAmmoAttr = tool:GetAttribute("MaxAmmo")
+                    if maxAmmoAttr then
+                        tool:SetAttribute(attrName, maxAmmoAttr)
+                    else
+                        -- Nếu không có MaxAmmo, set = 999
+                        tool:SetAttribute(attrName, 999)
+                    end
+                    
+                    if not scannedTools[tool.Name] then
+                        scannedTools[tool.Name] = true
+                        print(string.format("✅ [%s] Locked Attribute: %s", tool.Name, attrName))
+                    end
+                    
+                    ammoLocked = ammoLocked + 1
+                end
+            end
+            
+            -- Method 2: NumberValue/IntValue
+            for _, obj in pairs(tool:GetDescendants()) do
+                if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+                    local name = obj.Name:lower()
+                    
+                    if name:find("ammo") or name:find("mag") or name:find("clip") or name:find("bullet") then
+                        obj.Value = 999
+                        ammoLocked = ammoLocked + 1
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Scan Character (tool đang cầm)
+    for _, tool in pairs(character:GetChildren()) do
+        if tool:IsA("Tool") then
+            toolsFound = toolsFound + 1
+            
+            -- Attributes
+            local attributes = tool:GetAttributes()
+            for attrName, attrValue in pairs(attributes) do
+                local name = attrName:lower()
+                
+                if name:find("ammo") or name:find("mag") or name:find("clip") then
+                    local maxAmmoAttr = tool:GetAttribute("MaxAmmo")
+                    if maxAmmoAttr then
+                        tool:SetAttribute(attrName, maxAmmoAttr)
+                    else
+                        tool:SetAttribute(attrName, 999)
+                    end
+                    
+                    if not scannedTools[tool.Name] then
+                        scannedTools[tool.Name] = true
+                        print(string.format("✅ [%s] Locked Attribute: %s", tool.Name, attrName))
+                    end
+                    
+                    ammoLocked = ammoLocked + 1
+                end
+            end
+            
+            -- NumberValue/IntValue
+            for _, obj in pairs(tool:GetDescendants()) do
+                if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+                    local name = obj.Name:lower()
+                    
+                    if name:find("ammo") or name:find("mag") or name:find("clip") or name:find("bullet") then
+                        obj.Value = 999
+                        ammoLocked = ammoLocked + 1
+                    end
+                end
+            end
+        end
+    end
+    
+    return toolsFound, ammoLocked
+end
+
+-- =============================================
+-- BẬT
+-- =============================================
+local function enable()
+    enabled = true
+    
+    print("\n" .. string.rep("=", 60))
+    print("AUTO INFINITE AMMO - ENABLED")
+    print(string.rep("=", 60))
+    
+    -- Scan ngay lập tức
+    local tools, ammo = scanAndSetInfiniteAmmo()
+    print(string.format("Initial scan: %d tools, %d ammo values", tools, ammo))
+    
+    -- Update liên tục
+    updateConn = RunService.Heartbeat:Connect(function()
+        if not enabled then return end
+        
+        local toolsFound, ammoLocked = scanAndSetInfiniteAmmo()
+        
+        -- Update GUI
+        lbl.Text = string.format(
+            "[K] Auto Inf Ammo: ON\n\nScanned: %d tools\nAmmo Locked: %d values\n\nAuto-detect Ammo attributes",
+            toolsFound, ammoLocked
+        )
+    end)
+    
+    lbl.BackgroundColor3 = Color3.fromRGB(20, 40, 0)
+    stroke.Color = Color3.fromRGB(100, 255, 0)
+    
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "∞ Auto Infinite Ammo ON",
+        Duration = 2,
+        Text = "Auto-scanning all weapons!",
+    })
+end
+
+-- =============================================
+-- TẮT
+-- =============================================
+local function disable()
+    enabled = false
+    
+    if updateConn then
+        updateConn:Disconnect()
+        updateConn = nil
+    end
+    
+    table.clear(scannedTools)
+    
+    lbl.Text = "[K] Auto Inf Ammo: OFF\n\nScanned: 0 tools\nAmmo Locked: 0 weapons\n\nAuto-detect Ammo attributes"
+    lbl.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    stroke.Color = Color3.fromRGB(80, 80, 80)
+    
+    print("\n" .. string.rep("=", 60))
+    print("AUTO INFINITE AMMO - DISABLED")
+    print(string.rep("=", 60))
+    
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "✅ Auto Inf Ammo OFF",
+        Duration = 2,
+        Text = "Ammo back to normal",
+    })
+end
+
+-- =============================================
+-- INPUT
+-- =============================================
+UserInputService.InputBegan:Connect(function(input, chat)
+    if chat then return end
+    
+    if input.KeyCode == Enum.KeyCode.K then
+        if not enabled then
+            enable()
+        else
+            disable()
+        end
+    end
+end)
+
+-- =============================================
+-- AUTO DETECT NEW TOOLS
+-- =============================================
+backpack.ChildAdded:Connect(function(child)
+    if not enabled then return end
+    
+    if child:IsA("Tool") then
+        task.wait(0.1)  -- Đợi attributes load
+        
+        print(string.format("\n🔍 New tool detected: %s", child.Name))
+        
+        -- Scan attributes
+        local attributes = child:GetAttributes()
+        for attrName, attrValue in pairs(attributes) do
+            print(string.format("  Attribute: %s = %s", attrName, tostring(attrValue)))
+        end
+    end
+end)
+
+-- =============================================
+-- RESPAWN
+-- =============================================
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    table.clear(scannedTools)
+    
+    if enabled then
+        task.wait(1)
+    end
+end)
+
+-- Init scan
+task.wait(1)
+print("\n" .. string.rep("=", 60))
+print("AUTO INFINITE AMMO SCANNER")
+print(string.rep("=", 60))
+print("Features:")
+print("  ✅ Auto-detect Ammo attributes")
+print("  ✅ Auto-detect MaxAmmo attributes")
+print("  ✅ Auto-detect new tools")
+print("  ✅ Scan Backpack + Character")
+print("  ✅ Support Attributes + NumberValues")
+print("\nPress [K] to toggle")
+print(string.rep("=", 60))
+
+-- Scan hiện tại để show info
+local initialTools = 0
+for _, tool in pairs(backpack:GetChildren()) do
+    if tool:IsA("Tool") then
+        initialTools = initialTools + 1
+        print(string.format("\n📦 Tool: %s", tool.Name))
+        
+        -- Show attributes
+        local attributes = tool:GetAttributes()
+        for attrName, attrValue in pairs(attributes) do
+            print(string.format("  → Attribute: %s = %s", attrName, tostring(attrValue)))
+        end
+    end
+end
+
+if initialTools > 0 then
+    print(string.format("\nFound %d tools in backpack", initialTools))
+    print("Ready to lock ammo!")
+else
+    print("\nNo tools found yet. Equip weapons to scan.")
+end
+
+game.StarterGui:SetCore("SendNotification", {
+    Title = "∞ Auto Inf Ammo Ready",
+    Duration = 3,
+    Text = "Press [K] to enable\nAuto-scans all weapons!",
+})
